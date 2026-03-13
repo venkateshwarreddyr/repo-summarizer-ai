@@ -29,6 +29,9 @@ export async function analyzeWithLLM(
 ): Promise<RepoSummary> {
   const apiKey =
     process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || "";
+  if (!apiKey) {
+    throw new Error("AI service is not configured. Please set the API key in environment variables.");
+  }
   const baseURL = process.env.LLM_BASE_URL || "https://router.huggingface.co/v1";
   const model = process.env.LLM_MODEL || "zai-org/GLM-5:zai-org";
 
@@ -60,17 +63,40 @@ Return ONLY valid JSON, no markdown fences.`;
     }
   }
 
-  const completion = await openai.chat.completions.create({
-    model,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userContent },
-    ],
-    response_format: { type: "json_object" },
-  });
+  let completion;
+  try {
+    completion = await openai.chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
+      response_format: { type: "json_object" },
+    });
+  } catch (err: unknown) {
+    const error = err as { status?: number; code?: string; message?: string };
+    if (error.status === 401) {
+      throw new Error("AI service authentication failed. Please check your API key configuration.");
+    }
+    if (error.status === 429) {
+      throw new Error("AI service rate limit exceeded. Please wait a moment and try again.");
+    }
+    if (error.status === 402 || error.code === "insufficient_quota") {
+      throw new Error("AI service quota exceeded. Please check your billing and usage limits.");
+    }
+    if (error.status === 503 || error.status === 500) {
+      throw new Error("AI service is temporarily unavailable. Please try again later.");
+    }
+    throw new Error("Failed to connect to AI service. Please try again later.");
+  }
 
   const text = completion.choices[0].message.content || "{}";
-  const summary = JSON.parse(text) as Omit<RepoSummary, "stars" | "url">;
+  let summary: Omit<RepoSummary, "stars" | "url">;
+  try {
+    summary = JSON.parse(text) as Omit<RepoSummary, "stars" | "url">;
+  } catch {
+    throw new Error("AI returned an invalid response. Please try again.");
+  }
 
   return {
     ...summary,
