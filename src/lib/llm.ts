@@ -27,15 +27,13 @@ export async function analyzeWithLLM(
   tree: string[],
   configFiles: Record<string, string>
 ): Promise<RepoSummary> {
-  const apiKey =
-    process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || "";
+  const apiKey = process.env.OPENAI_API_KEY || "";
   if (!apiKey) {
-    throw new Error("AI service is not configured. Please set the API key in environment variables.");
+    throw new Error("AI service is not configured. Please set OPENAI_API_KEY in environment variables.");
   }
-  const baseURL = process.env.LLM_BASE_URL || "https://router.huggingface.co/v1";
-  const model = process.env.LLM_MODEL || "zai-org/GLM-5:zai-org";
+  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
-  const openai = new OpenAI({ apiKey, baseURL });
+  const openai = new OpenAI({ apiKey });
 
   const systemPrompt = `You are a software analyst. Analyze the given GitHub repository information and return a JSON object with exactly these fields:
 {
